@@ -26,6 +26,8 @@ open "build/Ancient World Map.app"
 
 `build.sh` builds a release binary with SwiftPM and wraps it into `build/Ancient World Map.app`, signed locally with an ad-hoc signature (no developer certificate). To run it straight from the command line during development, use `swift run`.
 
+The app icon (`Resources/AppIcon.icns`) is drawn from the SF Symbol `map.fill`. To regenerate it, run `swift scripts/make-icon.swift`.
+
 ## How it works
 
 Everything lives in [`Sources/AncientWorldMap/main.swift`](Sources/AncientWorldMap/main.swift).
