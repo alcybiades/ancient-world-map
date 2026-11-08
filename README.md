@@ -3,7 +3,7 @@
 A native macOS app for the [World History Encyclopedia](https://www.worldhistory.org/map/) ancient world map.
 
 - Two-finger pan and pinch to zoom
-- Pick any year (BCE) from the glass control at the top
+- Pick any year, BCE or CE, from the glass control at the top
 
 ## Build
 

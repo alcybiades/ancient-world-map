@@ -315,11 +315,13 @@ final class MapWebView: WKWebView {
 
 // MARK: - Year control
 
-/// Floating Liquid Glass pill for picking the map's year (BCE).
+/// Floating Liquid Glass pill for picking the map's year. Years are signed like the
+/// map's own dates: negative is BCE, positive is CE. There is no year 0.
 final class YearBar: NSView, NSTextFieldDelegate {
     private let field = NSTextField()
+    private let eraButton = NSButton(title: "", target: nil, action: nil)
     private let step = 100
-    private let range = 1...20000
+    private let range = -20000...Calendar.current.component(.year, from: Date())
     private(set) var year: Int
     var onChange: ((Int) -> Void)?
 
@@ -331,7 +333,6 @@ final class YearBar: NSView, NSTextFieldDelegate {
         let earlier = Self.button("chevron.left", "\(step) years earlier", self, #selector(stepEarlier))
         let later = Self.button("chevron.right", "\(step) years later", self, #selector(stepLater))
 
-        field.stringValue = String(year)
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
@@ -343,11 +344,14 @@ final class YearBar: NSView, NSTextFieldDelegate {
         field.action = #selector(commit)
         field.widthAnchor.constraint(equalToConstant: 58).isActive = true
 
-        let era = NSTextField(labelWithString: "BCE")
-        era.font = .systemFont(ofSize: 17, weight: .semibold)
-        era.textColor = .secondaryLabelColor
+        eraButton.isBordered = false
+        eraButton.target = self
+        eraButton.action = #selector(toggleEra)
+        eraButton.toolTip = "Switch between BCE and CE"
+        eraButton.alignment = .left
+        eraButton.widthAnchor.constraint(equalToConstant: 40).isActive = true
 
-        let stack = NSStackView(views: [earlier, field, era, later])
+        let stack = NSStackView(views: [earlier, field, eraButton, later])
         stack.orientation = .horizontal
         stack.spacing = 4
         stack.edgeInsets = NSEdgeInsets(top: 0, left: 6, bottom: 0, right: 6)
@@ -363,6 +367,7 @@ final class YearBar: NSView, NSTextFieldDelegate {
             glass.bottomAnchor.constraint(equalTo: bottomAnchor),
             glass.heightAnchor.constraint(equalToConstant: 44),
         ])
+        showYear()
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -407,24 +412,51 @@ final class YearBar: NSView, NSTextFieldDelegate {
         return button
     }
 
+    private func showYear() {
+        field.stringValue = String(abs(year))
+        eraButton.attributedTitle = NSAttributedString(string: year < 0 ? "BCE" : "CE", attributes: [
+            .font: NSFont.systemFont(ofSize: 17, weight: .semibold),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ])
+    }
+
     private func set(_ newYear: Int) {
-        year = min(max(newYear, range.lowerBound), range.upperBound)
-        field.stringValue = String(year)
+        let clamped = min(max(newYear, range.lowerBound), range.upperBound)
+        year = clamped == 0 ? 1 : clamped
+        showYear()
         onChange?(year)
     }
 
+    /// The typed number in the current era, or nil if it isn't a valid year.
+    private var typedYear: Int? {
+        guard let value = Int(field.stringValue), value > 0 else { return nil }
+        let signed = year < 0 ? -value : value
+        return range.contains(signed) ? signed : nil
+    }
+
     @objc private func commit() {
-        let text = field.stringValue.trimmingCharacters(in: .whitespaces)
-        if let value = Int(text), range.contains(value) {
+        if let value = typedYear {
             if value != year { set(value) }
         } else {
             NSSound.beep()
-            field.stringValue = String(year)
+            showYear()
         }
     }
 
-    @objc private func stepEarlier() { set(year + step) }
-    @objc private func stepLater() { set(year - step) }
+    @objc private func toggleEra() {
+        set(-(typedYear ?? year))
+    }
+
+    /// Moves by `delta` years, skipping the nonexistent year 0 (1 BCE is followed by 1 CE).
+    private func move(by delta: Int) {
+        var next = year + delta
+        if year < 0 && next >= 0 { next += 1 }
+        if year > 0 && next <= 0 { next -= 1 }
+        set(next)
+    }
+
+    @objc private func stepEarlier() { move(by: -step) }
+    @objc private func stepLater() { move(by: step) }
 
     // Digits only; Up/Down arrows step through time.
     func controlTextDidChange(_ obj: Notification) {
@@ -437,7 +469,7 @@ final class YearBar: NSView, NSTextFieldDelegate {
         case #selector(NSResponder.moveUp(_:)): stepEarlier(); return true
         case #selector(NSResponder.moveDown(_:)): stepLater(); return true
         case #selector(NSResponder.cancelOperation(_:)):
-            field.stringValue = String(year)
+            showYear()
             window?.makeFirstResponder(nil)
             return true
         default: return false
@@ -480,10 +512,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         container.addSubview(webView)
 
         // Matches the year in mapURL.
-        let yearBar = YearBar(year: 1600)
+        let yearBar = YearBar(year: -1600)
         yearBar.onChange = { [weak self] year in
             self?.webView.evaluateJavaScript(
-                "if (typeof set_date === 'function') set_date(\(-year))", completionHandler: nil)
+                "if (typeof set_date === 'function') set_date(\(year))", completionHandler: nil)
         }
         container.addSubview(yearBar)
         NSLayoutConstraint.activate([
